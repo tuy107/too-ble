@@ -107,6 +107,31 @@ button.grande{width:100%;padding:18px;font-size:18px}
   </div>
 
   <div class="tarjeta">
+    <div class="tit">Captura del bus &mdash; escuchar al CJ4</div>
+    <div class="aviso" style="margin-bottom:10px">Pon el <b>CJ4 en la otra rama</b> del cable Y. El teléfono queda de <b>oreja</b> (no manda nada al carro) y graba todo lo que pase mientras el CJ4 ejecuta una función. Con hora, para ver el saludo, la rutina y la respuesta.</div>
+    <div class="barra" style="margin-bottom:8px">
+      <span style="font-size:13px;font-weight:700;color:var(--tinta2)">Protocolo:</span>
+      <button class="sec proto sel" data-p="0" style="padding:8px 12px;font-size:14px">Auto</button>
+      <button class="sec proto" data-p="6" style="padding:8px 12px;font-size:14px">CAN 11/500</button>
+      <button class="sec proto" data-p="7" style="padding:8px 12px;font-size:14px">CAN 29/500</button>
+      <button class="sec proto" data-p="8" style="padding:8px 12px;font-size:14px">CAN 11/250</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin-bottom:10px;cursor:pointer">
+      <input type="checkbox" id="soloDiag" checked style="width:20px;height:20px">
+      Solo diagnóstico (0x700&ndash;0x7FF) &mdash; evita que el Bluetooth se ahogue con el tráfico normal
+    </label>
+    <div class="barra">
+      <button id="btnMon" disabled>🎧 Iniciar captura</button>
+      <button id="btnMonStop" class="sec" disabled>Detener</button>
+      <button id="btnCopiar" class="sec" disabled>Copiar todo</button>
+      <button id="btnLimpiar" class="sec" disabled>Limpiar</button>
+    </div>
+    <div style="font-family:var(--display);font-weight:700;font-size:14px;color:var(--tinta2);margin:10px 0 4px">
+      Tramas capturadas: <span id="nMon" style="color:var(--verde);font-size:18px">0</span></div>
+    <div id="mon" style="font-family:var(--mono);font-size:12px;font-weight:500;background:#0d2137;color:#9fe0b6;border-radius:12px;padding:10px;height:190px;overflow:auto;white-space:pre;word-break:normal;line-height:1.45"></div>
+  </div>
+
+  <div class="tarjeta">
     <div class="tit">Consola &mdash; manda cualquier comando</div>
     <div class="term">
       <input id="cmd" placeholder="ej: 010C  ·  ATRV  ·  0902" autocomplete="off" autocapitalize="characters" spellcheck="false">
@@ -214,8 +239,80 @@ async function conectar(){
 }
 
 function habilitar(on){
-  ["#btnLeer","#btnAuto","#btnDes","#btnEnv"].forEach(s=>$(s).disabled=!on);
+  ["#btnLeer","#btnAuto","#btnDes","#btnEnv","#btnMon","#btnCopiar","#btnLimpiar"].forEach(s=>$(s).disabled=!on);
   $("#btnCon").disabled=on;
+}
+
+// ---------- MODO MONITOR (escuchar el bus) ----------
+let protoSel="0", monActivo=false, capturas=[];
+document.querySelectorAll(".proto").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".proto").forEach(x=>x.classList.remove("sel"));
+  b.classList.add("sel"); protoSel=b.dataset.p;
+});
+
+function monLog(linea){
+  capturas.push(linea);
+  const m=$("#mon"); m.textContent += linea+"\n"; m.scrollTop=m.scrollHeight;
+  $("#nMon").textContent=capturas.length;
+}
+
+// En monitor el ELM327 vuelca lineas SUELTAS sin '>' hasta que lo paramos.
+// Por eso usamos un manejador aparte que corta por salto de linea y les pone hora.
+function onMonitor(ev){
+  const txt=new TextDecoder().decode(ev.target.value);
+  buffer+=txt;
+  let i;
+  while((i=buffer.search(/[\r\n]/))>=0){
+    const linea=buffer.slice(0,i).trim();
+    buffer=buffer.slice(i+1);
+    if(linea && linea!==">" && !/^(OK|SEARCHING|STOPPED|BUS INIT|\?)$/i.test(linea)){
+      const t=new Date();
+      const hora=t.toLocaleTimeString("es-MX",{hour12:false})+"."+String(t.getMilliseconds()).padStart(3,"0");
+      monLog(hora+"  "+linea);
+    }
+  }
+}
+
+async function iniciarMonitor(){
+  try{
+    monActivo=true;
+    $("#btnMon").disabled=true; $("#btnMonStop").disabled=false;
+    estado("Preparando oreja...","busy");
+    // desconectar el manejador normal, poner el de monitor
+    rxChar.removeEventListener("characteristicvaluechanged", onDato);
+    // init de ESCUCHA: eco off, con espacios, CON cabeceras (quien habla),
+    // sin formateo, y MUY IMPORTANTE control de flujo OFF (para NO transmitir)
+    for(const c of ["ATZ","ATE0","ATL0","ATS1","ATH1","ATCAF0","ATCFC0"]){
+      await enviar(c,2000); await sleep(100);
+    }
+    if(protoSel!=="0"){ await enviar("ATSP"+protoSel,2000); await sleep(100); }
+    else { await enviar("ATSP0",2000); await sleep(100); }
+    if($("#soloDiag").checked){
+      // filtro CAN: pasar solo IDs 0x700-0x7FF (la conversacion de diagnostico)
+      await enviar("ATCM700",1500); await sleep(80);
+      await enviar("ATCF700",1500); await sleep(80);
+    }
+    // a partir de aqui, todo lo que llegue es trafico del bus
+    buffer="";
+    rxChar.addEventListener("characteristicvaluechanged", onMonitor);
+    log("=== MONITOR ACTIVO. Ejecuta la funcion en el CJ4 ahora. ===","tx");
+    await escribir(enc("ATMA\r"));
+    estado("ESCUCHANDO el bus","on");
+  }catch(e){
+    log("ERROR monitor: "+e.message,"er"); pararMonitor();
+  }
+}
+
+async function pararMonitor(){
+  monActivo=false;
+  try{ await escribir(enc("\r")); }catch(e){}   // cualquier caracter detiene AT MA
+  await sleep(150);
+  rxChar.removeEventListener("characteristicvaluechanged", onMonitor);
+  buffer="";
+  rxChar.addEventListener("characteristicvaluechanged", onDato);
+  $("#btnMon").disabled=false; $("#btnMonStop").disabled=true;
+  estado("Conectado","on");
+  log("Monitor detenido. "+capturas.length+" tramas capturadas.","rx");
 }
 
 // ---------- E/S serie ----------
@@ -337,6 +434,18 @@ $("#btnAuto").onclick=toggleAuto;
 $("#btnDes").onclick=()=>{ if(autoT){clearInterval(autoT);autoT=null;} if(device&&device.gatt.connected) device.gatt.disconnect(); estado("Desconectado",""); habilitar(false); };
 $("#btnEnv").onclick=async()=>{ const c=$("#cmd").value.trim(); if(c){ await enviar(c.toUpperCase()); } };
 $("#cmd").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#btnEnv").click(); });
+$("#btnMon").onclick=iniciarMonitor;
+$("#btnMonStop").onclick=pararMonitor;
+$("#btnLimpiar").onclick=()=>{ capturas=[]; $("#mon").textContent=""; $("#nMon").textContent="0"; };
+$("#btnCopiar").onclick=async()=>{
+  const texto=capturas.join("\n");
+  try{ await navigator.clipboard.writeText(texto); $("#btnCopiar").textContent="✓ Copiado"; setTimeout(()=>$("#btnCopiar").textContent="Copiar todo",1500); }
+  catch(e){
+    // respaldo: seleccionar el texto para copiar a mano
+    const r=document.createRange(); r.selectNodeContents($("#mon"));
+    const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  }
+};
 </script>
 </body>
 </html>
