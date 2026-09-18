@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TOO-BLE · Lector de PIDs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@600;700;800&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+:root{
+  --azul:#0c3870; --azul-medio:#185fa5; --azul-claro:#2a7fd4;
+  --azul-palido:#e6f1fb; --borde:#cfe0f1;
+  --dorado:#ef9f27; --verde:#1c7a37; --verde-palido:#e4f5e8;
+  --rojo:#c62828; --rojo-palido:#fdecea;
+  --tinta:#0d2137; --tinta2:#33475f; --fondo:#eef3f8; --sup:#ffffff;
+  --display:'Exo 2',system-ui,sans-serif; --cuerpo:'Rajdhani',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--fondo);color:var(--tinta);
+  font-family:var(--cuerpo);font-weight:600;font-size:17px}
+body{max-width:640px;margin:0 auto;padding:14px 12px 40px;display:flex;flex-direction:column;gap:14px;min-height:100vh}
+h1{font-family:var(--display);font-weight:800;font-size:22px;margin:0;color:var(--azul);letter-spacing:.3px}
+.sub{font-size:13px;color:var(--tinta2);font-weight:600;margin-top:-8px}
+
+.barra{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.logo{font-family:var(--display);font-weight:800;font-size:20px;color:var(--azul)}
+.logo b{color:var(--dorado)}
+
+button{font-family:var(--display);font-weight:800;font-size:16px;border:0;border-radius:12px;
+  padding:14px 18px;cursor:pointer;color:#fff;background:var(--azul-medio);
+  box-shadow:0 3px 0 var(--azul);transition:transform .05s}
+button:active{transform:translateY(2px);box-shadow:0 1px 0 var(--azul)}
+button.sec{background:var(--sup);color:var(--azul);box-shadow:0 2px 0 var(--borde);border:1px solid var(--borde)}
+button:disabled{opacity:.5;box-shadow:none}
+button.grande{width:100%;padding:18px;font-size:18px}
+
+.estado{display:flex;align-items:center;gap:9px;font-family:var(--display);font-weight:700;font-size:15px}
+.punto{width:12px;height:12px;border-radius:50%;background:#b9c6d6;flex:0 0 auto}
+.estado.on .punto{background:var(--verde);box-shadow:0 0 0 4px var(--verde-palido)}
+.estado.err .punto{background:var(--rojo)}
+.estado.busy .punto{background:var(--dorado);animation:pulso 1s infinite}
+@keyframes pulso{50%{opacity:.35}}
+
+.tarjeta{background:var(--sup);border:1px solid var(--borde);border-radius:14px;padding:14px}
+.tit{font-family:var(--display);font-weight:800;font-size:13px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--tinta2);margin:0 0 10px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.pid{background:var(--azul-palido);border:1px solid var(--borde);border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:2px}
+.pid .n{font-size:12px;font-weight:700;color:var(--tinta2);line-height:1.15}
+.pid .v{font-family:var(--display);font-weight:800;font-size:26px;color:var(--azul);line-height:1;font-variant-numeric:tabular-nums}
+.pid .u{font-size:12px;font-weight:700;color:var(--tinta2)}
+.pid .code{font-family:var(--mono);font-size:10px;color:var(--azul-claro);margin-top:1px}
+.pid.vivo .v{color:var(--verde)}
+
+#log{font-family:var(--mono);font-size:12px;font-weight:500;background:#0d2137;color:#cfe3fa;
+  border-radius:12px;padding:10px;height:150px;overflow:auto;white-space:pre-wrap;word-break:break-all;line-height:1.4}
+#log .tx{color:#ffd166}
+#log .rx{color:#9fe0b6}
+#log .er{color:#ff8a80}
+
+.term{display:flex;gap:8px}
+.term input{flex:1;font-family:var(--mono);font-weight:600;font-size:15px;padding:12px;border:1px solid var(--borde);
+  border-radius:12px;background:var(--sup);color:var(--tinta)}
+.term input:focus{outline:2px solid var(--azul-claro);outline-offset:-1px}
+
+.aviso{font-size:13px;color:var(--tinta2);line-height:1.45}
+.aviso b{color:var(--tinta)}
+.warn{background:var(--rojo-palido);border:1px solid #f2c0bb;color:#8a2018;border-radius:12px;padding:12px;font-size:14px;display:none}
+.warn.ver{display:block}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chip{font-family:var(--mono);font-size:11px;font-weight:700;background:var(--azul-palido);color:var(--azul);
+  padding:3px 8px;border-radius:6px;border:1px solid var(--borde)}
+.pie{font-size:12px;color:var(--tinta2);text-align:center;margin-top:6px}
+</style>
+</head>
+<body>
+
+  <div class="barra">
+    <div class="logo">TOO<b>·</b>BLE</div>
+    <div id="estado" class="estado"><span class="punto"></span><span id="estadoTxt">Sin conectar</span></div>
+  </div>
+  <div class="sub">Lector de PIDs por Bluetooth (BLE). Nada que ver con las otras apps &mdash; herramienta suelta.</div>
+  <div class="chips">
+    <span class="chip">Adaptador: OBDII</span>
+    <span class="chip">92:8C:4A:13:AE:45</span>
+    <span class="chip">de Alonso</span>
+  </div>
+
+  <div id="warn" class="warn"></div>
+
+  <button id="btnCon" class="grande">🔗 Conectar adaptador</button>
+  <div class="barra">
+    <button id="btnLeer" class="sec" disabled>Leer PIDs una vez</button>
+    <button id="btnAuto" class="sec" disabled>Auto (cada 1s)</button>
+    <button id="btnDes" class="sec" disabled>Desconectar</button>
+  </div>
+
+  <div class="tarjeta">
+    <div class="tit">Valores en vivo <span id="cuenta" style="color:var(--azul-claro)"></span></div>
+    <div id="grid" class="grid">
+      <div class="aviso">Conecta el adaptador y presiona <b>Leer PIDs</b>. El teléfono habla con el ELM327; yo (la página) mando los comandos y decodifico. Primero pregunto qué PIDs soporta el carro y luego leo los que existan.</div>
+    </div>
+  </div>
+
+  <div class="tarjeta">
+    <div class="tit">Consola &mdash; manda cualquier comando</div>
+    <div class="term">
+      <input id="cmd" placeholder="ej: 010C  ·  ATRV  ·  0902" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button id="btnEnv" class="sec" disabled>Enviar</button>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <div class="tarjeta">
+    <div class="tit">Bitácora</div>
+    <div id="log"></div>
+  </div>
+
+  <div class="pie">TOO-BLE · para el taller de Toño · <span id="serv"></span></div>
+
+<script>
+"use strict";
+// ---------- Servicios BLE-serie conocidos de los ELM327 clon ----------
+// Un adaptador BLE expone un "puerto serie" sobre GATT. No hay un estandar
+// unico: los clones usan uno de estos tres. Los pedimos TODOS como
+// optionalServices y luego descubrimos cual trae el aparato.
+const SERVS = [
+  0xFFF0, 0xFFE0, 0xFFE5, 0xFF00, 0x18F0,
+  "6e400001-b5a3-f393-e0a9-e50e24dcca9e", // Nordic UART
+  "0000fff0-0000-1000-8000-00805f9b34fb",
+  "0000ffe0-0000-1000-8000-00805f9b34fb"
+];
+
+// ---------- Tabla de PIDs (modo 01) que sabemos decodificar ----------
+// [pid, nombre, cuantos bytes, funcion(A,B), unidad]
+const PIDS = [
+  ["04","Carga del motor",1,(a)=>a*100/255,"%"],
+  ["05","Temp. refrigerante",1,(a)=>a-40,"°C"],
+  ["06","Ajuste corto B1",1,(a)=>(a-128)*100/128,"%"],
+  ["07","Ajuste largo B1",1,(a)=>(a-128)*100/128,"%"],
+  ["0A","Presion combustible",1,(a)=>a*3,"kPa"],
+  ["0B","Presion colector",1,(a)=>a,"kPa"],
+  ["0C","RPM",2,(a,b)=>(a*256+b)/4,"rpm"],
+  ["0D","Velocidad",1,(a)=>a,"km/h"],
+  ["0E","Avance encendido",1,(a)=>a/2-64,"°"],
+  ["0F","Temp. admision",1,(a)=>a-40,"°C"],
+  ["10","Flujo aire (MAF)",2,(a,b)=>(a*256+b)/100,"g/s"],
+  ["11","Mariposa (TPS)",1,(a)=>a*100/255,"%"],
+  ["1F","Tiempo encendido",2,(a,b)=>a*256+b,"s"],
+  ["2F","Nivel combustible",1,(a)=>a*100/255,"%"],
+  ["42","Voltaje modulo",2,(a,b)=>(a*256+b)/1000,"V"],
+  ["43","Carga absoluta",2,(a,b)=>(a*256+b)*100/255,"%"],
+  ["45","Mariposa relativa",1,(a)=>a*100/255,"%"],
+  ["46","Temp. ambiente",1,(a)=>a-40,"°C"],
+  ["47","Mariposa B",1,(a)=>a*100/255,"%"],
+  ["49","Pedal D",1,(a)=>a*100/255,"%"],
+  ["4A","Pedal E",1,(a)=>a*100/255,"%"]
+];
+const PIDMAP = Object.fromEntries(PIDS.map(p=>[p[0],p]));
+
+// ---------- Estado ----------
+let device=null, rxChar=null, txChar=null, buffer="", waiter=null, autoT=null;
+let soportados=[];
+
+const $=s=>document.querySelector(s);
+const log=(t,cls="")=>{const l=$("#log");const s=document.createElement("span");
+  if(cls)s.className=cls;s.textContent=t+"\n";l.appendChild(s);l.scrollTop=l.scrollHeight;};
+function estado(txt,cls=""){$("#estadoTxt").textContent=txt;$("#estado").className="estado "+cls;}
+function warn(msg){const w=$("#warn");if(!msg){w.className="warn";return;}w.innerHTML=msg;w.className="warn ver";}
+
+// ---------- Chequeo de soporte ----------
+if(!("bluetooth" in navigator)){
+  warn("Este navegador <b>no tiene Web Bluetooth</b>. Abre esta página en <b>Chrome de Android</b> (no Firefox, no iPhone).");
+}
+
+// ---------- Conexion ----------
+async function conectar(){
+  try{
+    estado("Buscando adaptador...","busy");
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices:true, optionalServices:SERVS
+    });
+    device.addEventListener("gattserverdisconnected", ()=>{ estado("Desconectado","err"); habilitar(false); });
+    estado("Conectando...","busy"); log("Conectando a "+(device.name||"adaptador"),"tx");
+    const gatt = await device.gatt.connect();
+    // descubrir el servicio serie y sus caracteristicas
+    const servs = await gatt.getPrimaryServices();
+    for(const sv of servs){
+      const chars = await sv.getCharacteristics();
+      for(const c of chars){
+        if((c.properties.notify||c.properties.indicate) && !rxChar) rxChar=c;
+        if((c.properties.write||c.properties.writeWithoutResponse) && !txChar) txChar=c;
+      }
+      if(rxChar && txChar) { $("#serv").textContent="servicio "+sv.uuid.slice(0,8); break; }
+    }
+    if(!rxChar || !txChar){ throw new Error("No encontre el canal serie en el adaptador"); }
+    await rxChar.startNotifications();
+    rxChar.addEventListener("characteristicvaluechanged", onDato);
+    estado("Conectado · iniciando ELM327","busy");
+    await iniciarElm();
+    estado("Conectado ("+(device.name||"OBD")+")","on");
+    habilitar(true); warn("");
+    log("Listo. Presiona Leer PIDs.","rx");
+  }catch(e){
+    estado("Error de conexion","err");
+    log("ERROR: "+e.message,"er");
+    if(/User cancelled|cancela/i.test(e.message)) estado("Sin conectar","");
+    else warn("No conecto: <b>"+e.message+"</b>. Revisa que el adaptador esté encendido (carro con contacto) y que no esté conectado a otra app o al teléfono.");
+  }
+}
+
+function habilitar(on){
+  ["#btnLeer","#btnAuto","#btnDes","#btnEnv"].forEach(s=>$(s).disabled=!on);
+  $("#btnCon").disabled=on;
+}
+
+// ---------- E/S serie ----------
+function onDato(ev){
+  const txt = new TextDecoder().decode(ev.target.value);
+  buffer += txt;
+  if(buffer.includes(">")){           // el ELM327 termina cada respuesta con '>'
+    const resp = buffer.replace(/>/g,"").trim();
+    buffer="";
+    if(resp) log("← "+resp.replace(/\r/g," "),"rx");
+    if(waiter){ const w=waiter; waiter=null; w(resp); }
+  }
+}
+function enc(str){ return new TextEncoder().encode(str); }
+async function escribir(bytes){
+  // trocear a 20 bytes por si el MTU es chico
+  for(let i=0;i<bytes.length;i+=20){
+    const chunk=bytes.slice(i,i+20);
+    if(txChar.properties.writeWithoutResponse) await txChar.writeValueWithoutResponse(chunk);
+    else await txChar.writeValue(chunk);
+  }
+}
+function enviar(cmd, timeout=3000){
+  return new Promise(async (res)=>{
+    buffer="";
+    log("→ "+cmd,"tx");
+    const t=setTimeout(()=>{ if(waiter){waiter=null; res("(sin respuesta)");} }, timeout);
+    waiter=(r)=>{ clearTimeout(t); res(r); };
+    try{ await escribir(enc(cmd+"\r")); }
+    catch(e){ clearTimeout(t); waiter=null; log("ERROR envio: "+e.message,"er"); res("(error)"); }
+  });
+}
+
+async function iniciarElm(){
+  // eco off, sin saltos, sin espacios, sin cabeceras, auto-protocolo
+  for(const c of ["ATZ","ATE0","ATL0","ATS0","ATH0","ATSP0"]){
+    await enviar(c, 2500); await sleep(120);
+  }
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+// ---------- Lectura de PIDs ----------
+function limpiaHex(s){ return s.replace(/[^0-9A-Fa-f]/g,"").toUpperCase(); }
+
+async function descubrirSoportados(){
+  soportados=[];
+  for(const base of ["00","20","40","60"]){
+    const r = await enviar("01"+base);
+    const hx = limpiaHex(r);
+    const i = hx.indexOf("41"+base);
+    if(i<0) continue;
+    const datos = hx.slice(i+4, i+12); // 4 bytes = 8 hex
+    if(datos.length<8) continue;
+    const mask = parseInt(datos,16);
+    for(let bit=0; bit<32; bit++){
+      if(mask & (1<<(31-bit))){
+        const pid = (parseInt(base,16)+bit+1).toString(16).toUpperCase().padStart(2,"0");
+        soportados.push(pid);
+      }
+    }
+    if(!(mask & 1)) break; // el bit 0 dice si hay mas rangos
+  }
+  return soportados;
+}
+
+function decodifica(pid, hx){
+  const p = PIDMAP[pid]; if(!p) return null;
+  const i = hx.indexOf("41"+pid);
+  if(i<0) return null;
+  const b=[];
+  for(let k=0;k<p[2];k++){ const bb=hx.slice(i+4+k*2, i+6+k*2); if(bb.length<2) return null; b.push(parseInt(bb,16)); }
+  let v = p[3](...b);
+  v = Math.round(v*10)/10;
+  return v;
+}
+
+async function leerTodos(){
+  if(!soportados.length){
+    estado("Preguntando PIDs soportados...","busy");
+    await descubrirSoportados();
+    const conNombre = soportados.filter(p=>PIDMAP[p]);
+    log("El carro soporta "+soportados.length+" PIDs; decodifico "+conNombre.length,"rx");
+    $("#chips").innerHTML = soportados.map(p=>'<span class="chip">01'+p+'</span>').join("");
+    pintarGrid(conNombre);
+    estado("Conectado","on");
+  }
+  const leibles = soportados.filter(p=>PIDMAP[p]);
+  $("#cuenta").textContent = "("+leibles.length+")";
+  for(const pid of leibles){
+    const r = await enviar("01"+pid, 1500);
+    const v = decodifica(pid, limpiaHex(r));
+    const cell = $("#v_"+pid);
+    if(cell && v!==null){ cell.textContent = v; cell.closest(".pid").classList.add("vivo"); }
+  }
+}
+
+function pintarGrid(pids){
+  const g=$("#grid");
+  if(!pids.length){ g.innerHTML='<div class="aviso">El carro no reportó PIDs decodificables. Prueba la consola con <b>0100</b>.</div>'; return; }
+  g.innerHTML = pids.map(pid=>{
+    const p=PIDMAP[pid];
+    return '<div class="pid" id="c_'+pid+'"><div class="n">'+p[1]+'</div>'+
+      '<div class="v" id="v_'+pid+'">—</div><div class="u">'+p[4]+'</div>'+
+      '<div class="code">01'+pid+'</div></div>';
+  }).join("");
+}
+
+// ---------- Auto ----------
+function toggleAuto(){
+  if(autoT){ clearInterval(autoT); autoT=null; $("#btnAuto").textContent="Auto (cada 1s)"; return; }
+  $("#btnAuto").textContent="⏸ Detener";
+  autoT=setInterval(()=>{ if(!waiter) leerTodos(); }, 1000);
+}
+
+// ---------- Botones ----------
+$("#btnCon").onclick=conectar;
+$("#btnLeer").onclick=()=>leerTodos();
+$("#btnAuto").onclick=toggleAuto;
+$("#btnDes").onclick=()=>{ if(autoT){clearInterval(autoT);autoT=null;} if(device&&device.gatt.connected) device.gatt.disconnect(); estado("Desconectado",""); habilitar(false); };
+$("#btnEnv").onclick=async()=>{ const c=$("#cmd").value.trim(); if(c){ await enviar(c.toUpperCase()); } };
+$("#cmd").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#btnEnv").click(); });
+</script>
+</body>
+</html>
