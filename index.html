@@ -35,6 +35,7 @@ button{font-family:var(--display);font-weight:800;font-size:16px;border:0;border
 button:active{transform:translateY(2px);box-shadow:0 1px 0 var(--azul)}
 button.sec{background:var(--sup);color:var(--azul);box-shadow:0 2px 0 var(--borde);border:1px solid var(--borde)}
 button:disabled{opacity:.5;box-shadow:none}
+.proto.sel{background:var(--azul-medio);color:#fff;box-shadow:0 2px 0 var(--azul);border-color:var(--azul)}
 button.grande{width:100%;padding:18px;font-size:18px}
 
 .estado{display:flex;align-items:center;gap:9px;font-family:var(--display);font-weight:700;font-size:15px}
@@ -111,8 +112,8 @@ button.grande{width:100%;padding:18px;font-size:18px}
     <div class="aviso" style="margin-bottom:10px">Pon el <b>CJ4 en la otra rama</b> del cable Y. El teléfono queda de <b>oreja</b> (no manda nada al carro) y graba todo lo que pase mientras el CJ4 ejecuta una función. Con hora, para ver el saludo, la rutina y la respuesta.</div>
     <div class="barra" style="margin-bottom:8px">
       <span style="font-size:13px;font-weight:700;color:var(--tinta2)">Protocolo:</span>
-      <button class="sec proto sel" data-p="0" style="padding:8px 12px;font-size:14px">Auto</button>
-      <button class="sec proto" data-p="6" style="padding:8px 12px;font-size:14px">CAN 11/500</button>
+      <button class="sec proto" data-p="0" style="padding:8px 12px;font-size:14px">Auto</button>
+      <button class="sec proto sel" data-p="6" style="padding:8px 12px;font-size:14px">CAN 11/500</button>
       <button class="sec proto" data-p="7" style="padding:8px 12px;font-size:14px">CAN 29/500</button>
       <button class="sec proto" data-p="8" style="padding:8px 12px;font-size:14px">CAN 11/250</button>
     </div>
@@ -244,7 +245,7 @@ function habilitar(on){
 }
 
 // ---------- MODO MONITOR (escuchar el bus) ----------
-let protoSel="0", monActivo=false, capturas=[];
+let protoSel="6", monActivo=false, capturas=[];
 document.querySelectorAll(".proto").forEach(b=>b.onclick=()=>{
   document.querySelectorAll(".proto").forEach(x=>x.classList.remove("sel"));
   b.classList.add("sel"); protoSel=b.dataset.p;
@@ -265,7 +266,8 @@ function onMonitor(ev){
   while((i=buffer.search(/[\r\n]/))>=0){
     const linea=buffer.slice(0,i).trim();
     buffer=buffer.slice(i+1);
-    if(linea && linea!==">" && !/^(OK|SEARCHING|STOPPED|BUS INIT|\?)$/i.test(linea)){
+    const esRuido=/^(OK|STOPPED|BUS INIT|\?|>|SEARCHING\.*|UNABLE TO CONNECT|NO DATA|CAN ERROR|BUFFER FULL|ERR\w*|<.*)$/i.test(linea);
+    if(linea && !esRuido){
       const t=new Date();
       const hora=t.toLocaleTimeString("es-MX",{hour12:false})+"."+String(t.getMilliseconds()).padStart(3,"0");
       monLog(hora+"  "+linea);
