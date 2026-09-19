@@ -118,7 +118,7 @@ button.grande{width:100%;padding:18px;font-size:18px}
       <button class="sec proto" data-p="8" style="padding:8px 12px;font-size:14px">CAN 11/250</button>
     </div>
     <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;margin-bottom:10px;cursor:pointer">
-      <input type="checkbox" id="soloDiag" checked style="width:20px;height:20px">
+      <input type="checkbox" id="soloDiag" style="width:20px;height:20px">
       Solo diagnóstico (0x700&ndash;0x7FF) &mdash; evita que el Bluetooth se ahogue con el tráfico normal
     </label>
     <div class="barra">
@@ -277,24 +277,25 @@ function onMonitor(ev){
 
 async function iniciarMonitor(){
   try{
+    if(autoT){ clearInterval(autoT); autoT=null; $("#btnAuto").textContent="Auto (cada 1s)"; }
     monActivo=true;
     $("#btnMon").disabled=true; $("#btnMonStop").disabled=false;
     estado("Preparando oreja...","busy");
-    // desconectar el manejador normal, poner el de monitor
-    rxChar.removeEventListener("characteristicvaluechanged", onDato);
-    // init de ESCUCHA: eco off, con espacios, CON cabeceras (quien habla),
-    // sin formateo, y MUY IMPORTANTE control de flujo OFF (para NO transmitir)
+    // init de ESCUCHA con onDato ACTIVO (para que enviar() reciba respuesta):
+    // eco off, con espacios, CON cabeceras (quien habla), sin formateo, y MUY
+    // IMPORTANTE control de flujo OFF (para NO transmitir nada al bus).
     for(const c of ["ATZ","ATE0","ATL0","ATS1","ATH1","ATCAF0","ATCFC0"]){
       await enviar(c,2000); await sleep(100);
     }
-    if(protoSel!=="0"){ await enviar("ATSP"+protoSel,2000); await sleep(100); }
-    else { await enviar("ATSP0",2000); await sleep(100); }
-    if($("#soloDiag").checked){
-      // filtro CAN: pasar solo IDs 0x700-0x7FF (la conversacion de diagnostico)
-      await enviar("ATCM700",1500); await sleep(80);
-      await enviar("ATCF700",1500); await sleep(80);
-    }
-    // a partir de aqui, todo lo que llegue es trafico del bus
+    await enviar("ATSP"+(protoSel==="0"?"0":protoSel),2000); await sleep(120);
+    // ABRIR EL FILTRO. Al fijar el protocolo, el ELM327 deja pasar por defecto
+    // SOLO las respuestas (7E8) y por eso no oiamos las PREGUNTAS del CJ4 (7E0).
+    // 000/000 = acepta TODO (las dos direcciones). Con "solo diagnostico" =
+    // 700/700 (solo la conversacion 0x700-0x7FF), mas ligero para el Bluetooth.
+    if($("#soloDiag").checked){ await enviar("ATCM700",1500); await sleep(80); await enviar("ATCF700",1500); await sleep(80); }
+    else { await enviar("ATCM000",1500); await sleep(80); await enviar("ATCF000",1500); await sleep(80); }
+    // ahora si, a modo monitor crudo: todo lo que llegue es trafico del bus
+    rxChar.removeEventListener("characteristicvaluechanged", onDato);
     buffer="";
     rxChar.addEventListener("characteristicvaluechanged", onMonitor);
     log("=== MONITOR ACTIVO. Ejecuta la funcion en el CJ4 ahora. ===","tx");
