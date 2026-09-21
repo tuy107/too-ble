@@ -124,6 +124,7 @@ button.grande{width:100%;padding:18px;font-size:18px}
     <div class="barra">
       <button id="btnMon" disabled>🎧 Iniciar captura</button>
       <button id="btnMonStop" class="sec" disabled>Detener</button>
+      <button id="btnGuardar" class="sec" disabled>💾 Guardar .txt</button>
       <button id="btnCopiar" class="sec" disabled>Copiar todo</button>
       <button id="btnLimpiar" class="sec" disabled>Limpiar</button>
     </div>
@@ -240,7 +241,7 @@ async function conectar(){
 }
 
 function habilitar(on){
-  ["#btnLeer","#btnAuto","#btnDes","#btnEnv","#btnMon","#btnCopiar","#btnLimpiar"].forEach(s=>$(s).disabled=!on);
+  ["#btnLeer","#btnAuto","#btnDes","#btnEnv","#btnMon","#btnGuardar","#btnCopiar","#btnLimpiar"].forEach(s=>$(s).disabled=!on);
   $("#btnCon").disabled=on;
 }
 
@@ -440,6 +441,27 @@ $("#cmd").addEventListener("keydown",e=>{ if(e.key==="Enter") $("#btnEnv").click
 $("#btnMon").onclick=iniciarMonitor;
 $("#btnMonStop").onclick=pararMonitor;
 $("#btnLimpiar").onclick=()=>{ capturas=[]; $("#mon").textContent=""; $("#nMon").textContent="0"; };
+$("#btnGuardar").onclick=()=>{
+  // Guarda la captura como archivo .txt en Descargas del telefono. Es el guardado
+  // CONFIABLE (el portapapeles se perdia). Nombre con fecha y hora para no pisar.
+  const t=new Date();
+  const p=n=>String(n).padStart(2,"0");
+  const sello=t.getFullYear()+p(t.getMonth()+1)+p(t.getDate())+"-"+p(t.getHours())+p(t.getMinutes())+p(t.getSeconds());
+  const cab="# TOO-BLE captura del bus  ·  Pontiac G3\n"
+           +"# "+t.toLocaleString("es-MX")+"\n"
+           +"# protocolo ATSP"+protoSel+(($("#soloDiag").checked)?"  ·  solo diagnostico (700)":"  ·  todo el bus (000)")+"\n"
+           +"# "+capturas.length+" tramas\n\n";
+  const texto=cab+(capturas.length?capturas.join("\n"):"(sin tramas)")+"\n";
+  const blob=new Blob([texto],{type:"text/plain;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="too-ble-captura-"+sello+".txt";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+  $("#btnGuardar").textContent="✓ Guardado";
+  setTimeout(()=>$("#btnGuardar").textContent="💾 Guardar .txt",1800);
+  log("Captura guardada en Descargas: too-ble-captura-"+sello+".txt","rx");
+};
 $("#btnCopiar").onclick=async()=>{
   const texto=capturas.join("\n");
   try{ await navigator.clipboard.writeText(texto); $("#btnCopiar").textContent="✓ Copiado"; setTimeout(()=>$("#btnCopiar").textContent="Copiar todo",1500); }
